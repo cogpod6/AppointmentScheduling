@@ -10,13 +10,24 @@ import java.util.Optional;
 import javax.transaction.Transactional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
 
 import com.cts.learning.scheduling.model.Appointment;
 import com.cts.learning.scheduling.model.AppointmentEO;
 import com.cts.learning.scheduling.model.AppointmentPO;
 import com.cts.learning.scheduling.model.AppointmentPOEO;
 import com.cts.learning.scheduling.model.DCSlots;
+import com.cts.learning.scheduling.model.DownstreamApp;
+import com.cts.learning.scheduling.model.PO;
 import com.cts.learning.scheduling.repository.AppointmentPORepo;
 import com.cts.learning.scheduling.repository.AppointmentRepo;
 
@@ -41,6 +52,9 @@ public class AppointmentService {
 	@Autowired
 	POService poService;
 	
+	@Autowired
+	RestTemplate restTemplate;
+	
 	public Appointment createAppointment (Appointment appointmentModel) throws RuntimeException {
 		int usedTruckCount = appointmentRepo.getCountBySlotId(appointmentModel.getDcSlots().getId());
 		int availableSlotCount = availableSlotCount(appointmentModel.getDcSlots().getId());
@@ -53,6 +67,7 @@ public class AppointmentService {
 
 				AppointmentEO responseEntity = appointmentRepo.save(appointmentEntity);
 
+				List<String> availablePOs = new ArrayList<>();
 				List<AppointmentPOEO> appointmentPOEntityList = new ArrayList<>(); 
 				for (AppointmentPO appointmentPO : appointmentModel.getAppointmentPOs()) {
 					AppointmentPOEO appointmentPOEntity = new AppointmentPOEO();
@@ -62,6 +77,7 @@ public class AppointmentService {
 					appointmentPOEntity.setAppointment(responseEntity);
 
 					appointmentPOEntityList.add(appointmentPOEntity);
+					availablePOs.add(appointmentPO.getPoNumber());
 				}
 
 				Iterable<AppointmentPOEO> iterable = () -> new Iterator<AppointmentPOEO>() {
@@ -79,6 +95,16 @@ public class AppointmentService {
 				};
 
 				appointmentPORepo.saveAll(iterable);
+				
+				// send downstream messages
+				DownstreamApp downstreamApp = new DownstreamApp();
+				downstreamApp.setAppointmentId(responseEntity.getId());
+				downstreamApp.setTruckNumber(appointmentModel.getTruck().getTruckNumber());
+				downstreamApp.setDcNumber(appointmentModel.getDcNumber());
+				downstreamApp.setTimeSlot(appointmentModel.getDcSlots().getTimeSlots());
+				downstreamApp.setPos(availablePOs);
+				
+				sendDownstreamMessage(downstreamApp);
 				return mapToModel(responseEntity);
 			} else {
 				throw new RuntimeException("Max truck count reached for the slot");
@@ -101,14 +127,34 @@ public class AppointmentService {
 	
 	public Boolean isPOAvailable (List<AppointmentPO> appointmentPOs) {
 		for (AppointmentPO appointmentPO : appointmentPOs) {
-			if (!poService.isPOExists(appointmentPO.getPoNumber()) ) {
+			/* if (!poService.isPOExists(appointmentPO.getPoNumber()) ) {
 				return false;
+			} */
+			PO po = getPO(appointmentPO.getPoNumber() );
+			if (null != po) {
+				return true;
 			}
 		}
-	/*	appointmentPOs.stream().filter(p -> !poService.isPOExists(p.getPoNumber()) ).map(a -> {
-			return false;
-		}); */
-		return true;
+		return false;
+	}
+	
+	public void sendDownstreamMessage (DownstreamApp downstreamApp) {
+		String url = "http://send-sch-info/publish";
+		
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.APPLICATION_JSON);
+		
+		HttpEntity<DownstreamApp> requestEntity = new HttpEntity<>(downstreamApp, headers);
+
+		ResponseEntity<String> response = restTemplate.exchange( url, HttpMethod.POST, requestEntity , String.class );
+		System.out.println("status: " + response.getBody());
+	}
+	
+	public PO getPO (String poNumber) {
+		String url = String.format("http://po-download/po/%s", poNumber);
+		ResponseEntity<PO> poResponse = restTemplate.exchange(url, HttpMethod.GET, null, new ParameterizedTypeReference<PO>() {
+		});
+		return poResponse.getBody();
 		
 	}
 	
