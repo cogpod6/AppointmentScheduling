@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.cts.learning.scheduling.model.Appointment;
 import com.cts.learning.scheduling.service.AppointmentService;
+import com.cts.learning.scheduling.util.BusinessException;
 
 @RestController
 @RequestMapping("appointment")
@@ -23,13 +24,13 @@ public class ApptController {
 	AppointmentService appointmentService;
 	
 	@GetMapping("/{appointmentId}")
-	public ResponseEntity<Appointment> getAppointment (@PathVariable Integer appointmentId) {
+	public ResponseEntity<Appointment> getAppointment (@PathVariable Integer appointmentId) throws BusinessException {
 		Appointment responseModel = appointmentService.getAppointmentDetails(appointmentId);
 		return ResponseEntity.status(HttpStatus.OK).body(responseModel);
 	}
 	
 	@PostMapping
-	public ResponseEntity<Appointment> createAppointment (@RequestBody Appointment appointment) {
+	public ResponseEntity<Appointment> createAppointment (@RequestBody Appointment appointment) throws BusinessException {
 		ResponseEntity<Appointment> response = null;
 		Appointment responseModel = appointmentService.createAppointment(appointment);
 		if (null != responseModel) {
@@ -41,21 +42,18 @@ public class ApptController {
 	}
 	
 	@PutMapping
-	public ResponseEntity<Appointment> updateAppointment (@RequestBody Appointment appointment) {
+	public ResponseEntity<Appointment> updateAppointment (@RequestBody Appointment appointment) throws BusinessException {
 		ResponseEntity<Appointment> response = ResponseEntity.status(HttpStatus.CONFLICT).body(null);
-		try {
-			Appointment responseModel = appointmentService.updateAppointment(appointment);
-			if (null != responseModel) {
-				response = ResponseEntity.status(HttpStatus.OK).body(responseModel) ;
-			} 
-		} catch (RuntimeException e) {
-			e.printStackTrace();
-		}
+		Appointment responseModel = appointmentService.updateAppointment(appointment);
+		if (null != responseModel) {
+			response = ResponseEntity.status(HttpStatus.OK).body(responseModel) ;
+		} 
+
 		return response;
 	}
 	
 	@DeleteMapping("/{appointmentId}")
-	public ResponseEntity<Appointment> deleteAppointment (@PathVariable Integer appointmentId) {
+	public ResponseEntity<Appointment> deleteAppointment (@PathVariable Integer appointmentId) throws BusinessException {
 		appointmentService.deleteAppointment(appointmentId);
 		return ResponseEntity.status(HttpStatus.OK).body(null);
 	}

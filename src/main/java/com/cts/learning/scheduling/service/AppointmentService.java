@@ -10,15 +10,7 @@ import java.util.Optional;
 import javax.transaction.Transactional;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import com.cts.learning.scheduling.model.Appointment;
@@ -30,6 +22,7 @@ import com.cts.learning.scheduling.model.DownstreamApp;
 import com.cts.learning.scheduling.model.PO;
 import com.cts.learning.scheduling.repository.AppointmentPORepo;
 import com.cts.learning.scheduling.repository.AppointmentRepo;
+import com.cts.learning.scheduling.util.BusinessException;
 
 @Service
 public class AppointmentService {
@@ -53,9 +46,12 @@ public class AppointmentService {
 	POService poService;
 	
 	@Autowired
+	ExternalUtilService externalService;
+	
+	@Autowired
 	RestTemplate restTemplate;
 	
-	public Appointment createAppointment (Appointment appointmentModel) throws RuntimeException {
+	public Appointment createAppointment (Appointment appointmentModel) throws BusinessException {
 		int usedTruckCount = appointmentRepo.getCountBySlotId(appointmentModel.getDcSlots().getId());
 		int availableSlotCount = availableSlotCount(appointmentModel.getDcSlots().getId());
 		
@@ -66,9 +62,9 @@ public class AppointmentService {
 				AppointmentEO appointmentEntity = mapToEntity(appointmentModel);
 
 				AppointmentEO responseEntity = appointmentRepo.save(appointmentEntity);
-
+			
 				List<String> availablePOs = new ArrayList<>();
-				List<AppointmentPOEO> appointmentPOEntityList = new ArrayList<>(); 
+				//List<AppointmentPOEO> appointmentPOEntityList = new ArrayList<>(); 
 				for (AppointmentPO appointmentPO : appointmentModel.getAppointmentPOs()) {
 					AppointmentPOEO appointmentPOEntity = new AppointmentPOEO();
 
@@ -76,10 +72,12 @@ public class AppointmentService {
 					appointmentPOEntity.setPoNumber(appointmentPO.getPoNumber());
 					appointmentPOEntity.setAppointment(responseEntity);
 
-					appointmentPOEntityList.add(appointmentPOEntity);
+					//appointmentPOEntityList.add(appointmentPOEntity);
+					appointmentPORepo.save(appointmentPOEntity);
 					availablePOs.add(appointmentPO.getPoNumber());
 				}
 
+				/*
 				Iterable<AppointmentPOEO> iterable = () -> new Iterator<AppointmentPOEO>() {
 					private int index = 0;
 
@@ -94,7 +92,8 @@ public class AppointmentService {
 					}
 				};
 
-				appointmentPORepo.saveAll(iterable);
+				appointmentPORepo.saveAll(iterable); */
+			
 				
 				// send downstream messages
 				DownstreamApp downstreamApp = new DownstreamApp();
@@ -104,13 +103,13 @@ public class AppointmentService {
 				downstreamApp.setTimeSlot(appointmentModel.getDcSlots().getTimeSlots());
 				downstreamApp.setPos(availablePOs);
 				
-				sendDownstreamMessage(downstreamApp);
+				externalService.sendDownstreamMessage(downstreamApp); 
 				return mapToModel(responseEntity);
 			} else {
-				throw new RuntimeException("Max truck count reached for the slot");
+				throw new BusinessException("Max truck count reached for the slot");
 			}
 		} else {
-			throw new RuntimeException("PO is not available to create appointment");
+			throw new BusinessException("PO is not available to create appointment");
 		}
 	}
 	
@@ -125,12 +124,12 @@ public class AppointmentService {
 		return slotCount;
 	}
 	
-	public Boolean isPOAvailable (List<AppointmentPO> appointmentPOs) {
+	public boolean isPOAvailable (List<AppointmentPO> appointmentPOs) {
 		for (AppointmentPO appointmentPO : appointmentPOs) {
 			/* if (!poService.isPOExists(appointmentPO.getPoNumber()) ) {
 				return false;
 			} */
-			PO po = getPO(appointmentPO.getPoNumber() );
+			PO po = externalService.getPO(appointmentPO.getPoNumber() );
 			if (null != po) {
 				return true;
 			}
@@ -138,28 +137,8 @@ public class AppointmentService {
 		return false;
 	}
 	
-	public void sendDownstreamMessage (DownstreamApp downstreamApp) {
-		String url = "http://send-sch-info/publish";
-		
-		HttpHeaders headers = new HttpHeaders();
-		headers.setContentType(MediaType.APPLICATION_JSON);
-		
-		HttpEntity<DownstreamApp> requestEntity = new HttpEntity<>(downstreamApp, headers);
-
-		ResponseEntity<String> response = restTemplate.exchange( url, HttpMethod.POST, requestEntity , String.class );
-		System.out.println("status: " + response.getBody());
-	}
-	
-	public PO getPO (String poNumber) {
-		String url = String.format("http://po-download/po/%s", poNumber);
-		ResponseEntity<PO> poResponse = restTemplate.exchange(url, HttpMethod.GET, null, new ParameterizedTypeReference<PO>() {
-		});
-		return poResponse.getBody();
-		
-	}
-	
 	@Transactional
-	public Appointment updateAppointment (Appointment appointmentModel) throws RuntimeException {
+	public Appointment updateAppointment (Appointment appointmentModel) throws BusinessException {
 		int usedTruckCount = appointmentRepo.getCountBySlotId(appointmentModel.getDcSlots().getId());
 		int availableSlotCount = availableSlotCount(appointmentModel.getDcSlots().getId());
 
@@ -187,19 +166,19 @@ public class AppointmentService {
 						appointmentPORepo.save(appointmentPOEntity);
 					} 
 				} else {
-					throw new RuntimeException("No Appointments found to update");
+					throw new BusinessException("No Appointments found to update");
 				}
 			} else {
-				throw new RuntimeException("Slots were reached with max truck count");
+				throw new BusinessException("Slots were reached with max truck count");
 			}
 		} else {
-			throw new RuntimeException("One of the po is not available to update the appointment");
+			throw new BusinessException("One of the po is not available to update the appointment");
 		}
 
 		return  null != responseEntity ? mapToModel(responseEntity) : null;
 	}
 	
-	public void deleteAppointment (Integer appointmentId) throws RuntimeException {
+	public void deleteAppointment (Integer appointmentId) throws BusinessException {
 		Optional<AppointmentEO> appointmentEO = appointmentRepo.findById(appointmentId);
 		if (appointmentEO.isPresent() ) {
 			List<AppointmentPOEO> appointmentPOs = appointmentPORepo.getAppointmentPOByApptId(appointmentId);
@@ -209,14 +188,14 @@ public class AppointmentService {
 			
 			appointmentRepo.delete(appointmentEO.get());
 		} else {
-			throw new RuntimeException("No Appointment Found");
+			throw new BusinessException("No Appointment Found");
 		}
 	}
 	
-	public Appointment getAppointmentDetails (Integer id) throws RuntimeException {
+	public Appointment getAppointmentDetails (Integer id) throws BusinessException {
 		return appointmentRepo.findById(id).map(appointment -> {
 			return mapToModel(appointment);
-		}).orElseThrow(() -> new RuntimeException("No Appointment Found"));
+		}).orElseThrow(() -> new BusinessException("No Appointment Found"));
 	}
 	
 	public AppointmentEO mapToEntity (Appointment appointmentModel) {
