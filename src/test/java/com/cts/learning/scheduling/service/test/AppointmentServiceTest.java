@@ -9,6 +9,7 @@ import java.util.Optional;
 
 import org.easymock.EasyMock;
 import org.easymock.EasyMockRunner;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -161,6 +162,78 @@ public class AppointmentServiceTest {
 		EasyMock.replay(mockExternalService);
 		
 		 appointmentService.createAppointment(appointmentModel);
+	}
+	
+	@Test
+	public void testCreateAppointmentWithMaxCountReached () {
+		DCSlots dcSlots = new DCSlots();
+		dcSlots.setId(1);
+		dcSlots.setMaxTrucks(3);
+		dcSlots.setTimeSlots("07:00 - 08:00");
+		Appointment appointmentModel = getAppointmentModel();
+		appointmentModel.setDcSlots(dcSlots);
+		
+		EasyMock.expect(mockAppointmentRepo.getCountBySlotId(dcSlots.getId())).andReturn(5).times(1);
+		EasyMock.replay(mockAppointmentRepo);
+		EasyMock.expect(mockDcSlotService.getDCSlots(1)).andReturn(dcSlots).times(1);
+		EasyMock.replay(mockDcSlotService);
+		EasyMock.expect(mockExternalService.getPO(poNUmber)).andReturn(getPOModel()).times(1);
+		EasyMock.replay(mockExternalService);
+		
+		Assert.assertThrows(BusinessException.class, () -> appointmentService.createAppointment(appointmentModel) );
+	}
+	
+	@Test
+	public void testCreateAppointmentWithNoPO () {
+		DCSlots dcSlots = new DCSlots();
+		dcSlots.setId(1);
+		dcSlots.setMaxTrucks(3);
+		dcSlots.setTimeSlots("07:00 - 08:00");
+		Appointment appointmentModel = getAppointmentModel();
+		appointmentModel.setDcSlots(dcSlots);
+		
+		EasyMock.expect(mockAppointmentRepo.getCountBySlotId(dcSlots.getId())).andReturn(5).times(1);
+		EasyMock.replay(mockAppointmentRepo);
+		EasyMock.expect(mockDcSlotService.getDCSlots(1)).andReturn(dcSlots).times(1);
+		EasyMock.replay(mockDcSlotService);
+		
+		Assert.assertThrows(BusinessException.class, () -> appointmentService.createAppointment(appointmentModel) );
+	}
+	
+	@Test
+	public void testUpdateAppointmentWithMaxCountReached () {
+		DCSlots dcSlots = new DCSlots();
+		dcSlots.setId(1);
+		dcSlots.setMaxTrucks(3);
+		dcSlots.setTimeSlots("07:00 - 08:00");
+		Appointment appointmentModel = getAppointmentModel();
+		appointmentModel.setDcSlots(dcSlots);
+		
+		EasyMock.expect(mockAppointmentRepo.getCountBySlotId(dcSlots.getId())).andReturn(5).times(1);
+		EasyMock.replay(mockAppointmentRepo);
+		EasyMock.expect(mockDcSlotService.getDCSlots(1)).andReturn(dcSlots).times(1);
+		EasyMock.replay(mockDcSlotService);
+		EasyMock.expect(mockExternalService.getPO(poNUmber)).andReturn(getPOModel()).times(1);
+		EasyMock.replay(mockExternalService);
+		
+		Assert.assertThrows(BusinessException.class, () -> appointmentService.updateAppointment(appointmentModel) );
+	}
+	
+	@Test
+	public void testUpdateAppointmentWithNoPO () {
+		DCSlots dcSlots = new DCSlots();
+		dcSlots.setId(1);
+		dcSlots.setMaxTrucks(3);
+		dcSlots.setTimeSlots("07:00 - 08:00");
+		Appointment appointmentModel = getAppointmentModel();
+		appointmentModel.setDcSlots(dcSlots);
+		
+		EasyMock.expect(mockAppointmentRepo.getCountBySlotId(dcSlots.getId())).andReturn(5).times(1);
+		EasyMock.replay(mockAppointmentRepo);
+		EasyMock.expect(mockDcSlotService.getDCSlots(1)).andReturn(dcSlots).times(1);
+		EasyMock.replay(mockDcSlotService);
+		
+		Assert.assertThrows(BusinessException.class, () -> appointmentService.updateAppointment(appointmentModel) );
 	}
 	
 	@Test
