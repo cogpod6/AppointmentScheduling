@@ -44,6 +44,8 @@ public class AppointmentServiceTest {
 	private TruckService mockTruckService;
 	private ExternalUtilService mockExternalService;
 	
+	private String poNUmber = "1111111111";
+	
 	@Before
 	public void setUp () {
 		appointmentService = new AppointmentService();
@@ -63,8 +65,6 @@ public class AppointmentServiceTest {
 	@Test
 	public void createAppointmentTest() throws BusinessException {
 		int dcSlotId = 1;
-		String poNUmber = "1111111111";
-		
 		DCSlots dcSlots = new DCSlots();
 		dcSlots.setId(1);
 		dcSlots.setMaxTrucks(10);
@@ -158,21 +158,61 @@ public class AppointmentServiceTest {
 		downstreamApp.setPos(availablePOs);
 		
 		EasyMock.expect(mockExternalService.sendDownstreamMessage(EasyMock.anyObject(DownstreamApp.class))).andReturn(true).times(1);
-		/*mockExternalService.sendDownstreamMessage(downstreamApp);
-		EasyMock.expectLastCall(); */
 		EasyMock.replay(mockExternalService);
 		
 		 appointmentService.createAppointment(appointmentModel);
 	}
 	
-	/*@Test
-	public void updateAppointmentTest() {
+	@Test
+	public void updateAppointmentTest() throws BusinessException {
+		Appointment appointmentModel = getAppointmentModel();
+		appointmentModel.setId(1);
+		DCSlots dcSlots = appointmentModel.getDcSlots();
+		Truck truckModel = appointmentModel.getTruck();
+
+		AppointmentEO appointmentEntity = getAppointmentEO(appointmentModel);
+		Optional<AppointmentEO> op = Optional.of(appointmentEntity);
+
+		EasyMock.expect(mockAppointmentRepo.getCountBySlotId(dcSlots.getId())).andReturn(5).times(1);
 		
-	} */
+		DCSlotsEO dcSlotsEntity = new DCSlotsEO();
+		dcSlotsEntity.setId(dcSlots.getId());
+		dcSlotsEntity.setMaxTrucks(dcSlots.getMaxTrucks());
+		dcSlotsEntity.setTimeSlots(dcSlots.getTimeSlots());
+		
+		EasyMock.expect(mockAppointmentRepo.findById(1)).andReturn(op).times(1);
+		EasyMock.expect(mockAppointmentRepo.save(EasyMock.anyObject(AppointmentEO.class))).andReturn(appointmentEntity).times(1);
+		EasyMock.replay(mockAppointmentRepo);
+
+		EasyMock.expect(mockExternalService.getPO(poNUmber)).andReturn(getPOModel()).times(1);
+		EasyMock.replay(mockExternalService);
+		
+		EasyMock.expect(mockDcSlotService.getDCSlots(1)).andReturn(dcSlots).times(1);
+		EasyMock.expect(mockDcSlotService.mapToEntity(EasyMock.anyObject(DCSlots.class))).andReturn(dcSlotsEntity).times(1);
+		EasyMock.expect(mockDcSlotService.mapTOModel(EasyMock.anyObject(DCSlotsEO.class))).andReturn(dcSlots).times(1);
+		EasyMock.replay(mockDcSlotService);
+
+		EasyMock.expect(mockTruckService.mapToEntity(truckModel)).andReturn(getTruckEntity(appointmentModel)).times(1);
+		EasyMock.expect(mockTruckService.mapToModel(EasyMock.anyObject(TruckEO.class))).andReturn(truckModel).times(1);
+		EasyMock.replay(mockTruckService);
+		
+		AppointmentPOEO appointmentPO = getAppointmentPOEntity(appointmentEntity);
+		List<AppointmentPOEO> appointmentPOList = new ArrayList<>();
+		
+		EasyMock.expect(mockAppointmentPORepo.getAppointmentPOByApptId(appointmentModel.getId())).andReturn(appointmentPOList).times(1);
+		mockAppointmentPORepo.deleteById(appointmentPO.getId());
+		EasyMock.expectLastCall();
+		
+		EasyMock.expect(mockAppointmentPORepo.save(EasyMock.anyObject(AppointmentPOEO.class))).andReturn(appointmentPO).times(1);
+		EasyMock.replay(mockAppointmentPORepo);
+		
+		appointmentService.updateAppointment(appointmentModel);
+	}
 	
 	@Test
 	public void deleteAppointmentTest () throws BusinessException {
-		AppointmentEO appointmentEntity = getAppointmentEO();
+		Appointment appointmentModel = getAppointmentModel();
+		AppointmentEO appointmentEntity = getAppointmentEO(appointmentModel);
 		Optional<AppointmentEO> op = Optional.of(appointmentEntity);
 		
 		AppointmentPOEO appointmentPOEntity = getAppointmentPOEntity(appointmentEntity);
@@ -197,7 +237,8 @@ public class AppointmentServiceTest {
 	@Test
 	public void getAppointmentsTest() throws BusinessException {
 		int appointmentId = 1;
-		AppointmentEO appointmentEntity = getAppointmentEO();
+		Appointment appointmentModel = getAppointmentModel();
+		AppointmentEO appointmentEntity = getAppointmentEO(appointmentModel);
 		Optional<AppointmentEO> op = Optional.of(appointmentEntity);
 		
 		EasyMock.expect(mockAppointmentRepo.findById(appointmentId)).andReturn(op).times(1);
@@ -207,51 +248,24 @@ public class AppointmentServiceTest {
 		EasyMock.verify(mockAppointmentRepo);
 	}
 	
-	/*
-	public DCSlots getDCSlotsModel () {
-		
-	}
-	
-	public DCSlotsEO getDCSlotsEntity () {
-		
-	}
-	
-	public Truck getTruckModel () {
-		
-	}
-	
-	public TruckEO getTruckEntity () {
-		
-	}
-	
-	public Appointment getAppointmentModel () {
-		
-	} */
-	
-	public AppointmentEO getAppointmentEO () {
-		DCSlots dcSlots = new DCSlots();
-		dcSlots.setId(1);
-		dcSlots.setMaxTrucks(10);
-		dcSlots.setTimeSlots("07:00 - 08:00");
-		
+	public DCSlotsEO getDCSlotsEntity (Appointment appointmentModel) {
 		DCSlotsEO dcSlotsEntity = new DCSlotsEO();
+		DCSlots dcSlots = appointmentModel.getDcSlots();
+		
 		dcSlotsEntity.setId(dcSlots.getId());
 		dcSlotsEntity.setMaxTrucks(dcSlots.getMaxTrucks());
 		dcSlotsEntity.setTimeSlots(dcSlots.getTimeSlots());
 		
-		TruckType truckTypeModel = new TruckType();
-		truckTypeModel.setId(1);
-		truckTypeModel.setType("test");
+		return dcSlotsEntity;
+	}
+	
+	public TruckEO getTruckEntity (Appointment appointmentModel) {
+		TruckType truckTypeModel = appointmentModel.getTruck().getTruckType();
+		Truck truckModel = appointmentModel.getTruck();
 		
 		TruckTypeEO truckType = new TruckTypeEO();
 		truckType.setId(truckTypeModel.getId());
 		truckType.setTruckType(truckTypeModel.getType());
-		
-		Truck truckModel = new Truck();
-		truckModel.setId(1);
-		truckModel.setTruckName("walmart");
-		truckModel.setTruckNumber("1234");
-		truckModel.setTruckType(truckTypeModel);
 		
 		TruckEO truck = new TruckEO();
 		truck.setId(truckModel.getId());
@@ -259,22 +273,49 @@ public class AppointmentServiceTest {
 		truck.setTruckNumber(truckModel.getTruckNumber());
 		truck.setTruckType(truckType);
 		
+		return truck;
+	} 
+	
+	public Appointment getAppointmentModel () {
+		Appointment appointmentModel = new Appointment();
+		
+		DCSlots dcSlots = new DCSlots();
+		dcSlots.setId(1);
+		dcSlots.setMaxTrucks(10);
+		dcSlots.setTimeSlots("07:00 - 08:00");
+		
+		TruckType truckTypeModel = new TruckType();
+		truckTypeModel.setId(1);
+		truckTypeModel.setType("test");
+		
+		Truck truckModel = new Truck();
+		truckModel.setId(1);
+		truckModel.setTruckName("walmart");
+		truckModel.setTruckNumber("1234");
+		truckModel.setTruckType(truckTypeModel);
+		
 		AppointmentPO appointmentPO = new AppointmentPO();
-		appointmentPO.setPoNumber("1111111111");
+		appointmentPO.setPoNumber(poNUmber);
 		List<AppointmentPO> appointmentPOList = new ArrayList<>();
 		appointmentPOList.add(appointmentPO);
 		
-		Appointment appointmentModel = new Appointment();
 		appointmentModel.setDate("2020-11-03");
 		appointmentModel.setDcNumber("7030");
 		appointmentModel.setDcSlots(dcSlots);
 		appointmentModel.setAppointmentPOs(appointmentPOList);
 		appointmentModel.setTruck(truckModel);
 		
-		PO po = new PO();
-		po.setPoNumber("1111111111");
-		po.setOrderQuantity(20);
-		po.setPoDate(new Date());
+		return appointmentModel;
+	} 
+	
+	public AppointmentEO getAppointmentEO (Appointment appointmentModel) {
+		DCSlotsEO dcSlotsEntity = getDCSlotsEntity(appointmentModel);
+		TruckEO truck = getTruckEntity(appointmentModel);
+		
+		AppointmentPO appointmentPO = new AppointmentPO();
+		appointmentPO.setPoNumber(poNUmber);
+		List<AppointmentPO> appointmentPOList = new ArrayList<>();
+		appointmentPOList.add(appointmentPO);
 		
 		AppointmentEO appointmentEntity =  new AppointmentEO();
 
@@ -294,9 +335,18 @@ public class AppointmentServiceTest {
 		AppointmentPOEO appointmentPOEO = new AppointmentPOEO();
 		appointmentPOEO.setAppointment(appointmentEntity);
 		appointmentPOEO.setId(1);
-		appointmentPOEO.setPoNumber("1111111111");
+		appointmentPOEO.setPoNumber(poNUmber);
 		
 		return appointmentPOEO;
+	}
+	
+	public PO getPOModel () {
+		PO po = new PO();
+		po.setPoNumber(poNUmber);
+		po.setOrderQuantity(20);
+		po.setPoDate(new Date());
+		
+		return po;
 	}
 
 }

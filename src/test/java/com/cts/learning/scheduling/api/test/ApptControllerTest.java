@@ -57,8 +57,29 @@ public class ApptControllerTest {
 		Assert.assertEquals(response.getStatusCodeValue(), 409);
 	}
 	
-	public void deleteAppointmentTest () {
+	@Test
+	public void deleteAppointmentTest () throws BusinessException {
+		mockAppointmentService.deleteAppointment(1);
+		EasyMock.expectLastCall();
+		EasyMock.replay(mockAppointmentService);
+	}
+	
+	@Test
+	public void updateAppointmentTest () throws BusinessException {
+		EasyMock.expect(mockAppointmentService.updateAppointment(EasyMock.anyObject(Appointment.class)) ).andReturn(getAppointmentModel()).times(1);
+		EasyMock.replay(mockAppointmentService);
 		
+		ResponseEntity<Appointment> response = apptController.updateAppointment(getAppointmentModel());
+		Assert.assertEquals(response.getStatusCodeValue(), 200);
+	}
+	
+	@Test
+	public void updateAppointmentWithConflictTest () throws BusinessException {
+		EasyMock.expect(mockAppointmentService.updateAppointment(EasyMock.anyObject(Appointment.class))).andReturn(null).times(1);
+		EasyMock.replay(mockAppointmentService);
+		
+		ResponseEntity<Appointment> response = apptController.updateAppointment(getAppointmentModel());
+		Assert.assertEquals(response.getStatusCodeValue(), 409);
 	}
 	
 	public Appointment getAppointmentModel() {
